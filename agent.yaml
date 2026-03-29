@@ -1,0 +1,220 @@
+# PRGuardian — GitAgent Manifest
+# Merge consequence intelligence for pull requests.
+# https://github.com/gitagent-standard
+
+name: PRGuardian
+version: 1.0.0
+description: >
+  PRGuardian is a merge consequence intelligence agent. It analyzes PR diffs to
+  predict what will happen if a pull request is merged — estimating blast radius,
+  modeling failure scenarios, detecting leaked secrets, and issuing a structured
+  merge brief with a clear MERGE / MERGE WITH CONDITIONS / DO NOT MERGE
+  recommendation. It is not a linter. It is a staff engineer's second opinion on
+  the most consequential action in your codebase: pressing the merge button.
+
+model:
+  preferred: claude-sonnet-4-20250514
+  compatible:
+    - claude-sonnet-4-20250514
+    - gpt-4o
+    - gemini-2.5-pro
+    - llama-3.1-405b
+
+author:
+  name: Aditya
+  url: https://github.com/aditya
+
+tags:
+  - code-review
+  - developer-tools
+  - risk-intelligence
+  - ci-cd
+  - merge-safety
+  - consequence-prediction
+
+skills:
+  - name: diff_semantic_analyzer
+    path: skills/diff_semantic_analyzer
+    description: >
+      Classifies the semantic type of every change in a PR diff — behavioral,
+      structural, contract, or cosmetic. This classification drives all
+      downstream risk assessment. A 500-line cosmetic diff is near-zero risk;
+      a 5-line behavioral change to auth is critical.
+
+  - name: blast_radius_estimator
+    path: skills/blast_radius_estimator
+    description: >
+      Maps which systems, services, and user flows are affected by the changes.
+      Analyzes import graphs, shared utility usage, API contract mutations, and
+      database schema changes to produce a confidence-ranked blast radius map.
+
+  - name: failure_mode_predictor
+    path: skills/failure_mode_predictor
+    description: >
+      Generates 2–4 specific, concrete failure scenarios that could occur post-merge.
+      Each scenario names the trigger condition, affected users, production
+      manifestation, and recovery difficulty. This is consequence prediction,
+      not bug detection.
+
+  - name: deployment_timing_advisor
+    path: skills/deployment_timing_advisor
+    description: >
+      Recommends when to deploy the change — not just whether to merge it.
+      Accounts for payment flows, auth criticality, traffic patterns, migration
+      risk, and the current day/time. Outputs a specific deployment window
+      with justification.
+
+  - name: reviewer_assignment_reasoner
+    path: skills/reviewer_assignment_reasoner
+    description: >
+      Reasons about who should review the PR and why, based on which systems
+      were modified. Produces a prioritized list of review requirements, turning
+      PRGuardian from a passive reporter into an active workflow orchestrator.
+
+  - name: developer_context_synthesizer
+    path: skills/developer_context_synthesizer
+    description: >
+      Analyzes signals about the developer and circumstances to calibrate review
+      intensity. First-time contributor? Unusual PR size? Late-night commit burst?
+      These meta-signals inform scrutiny level independent of the code itself.
+
+  - name: merge_brief_synthesizer
+    path: skills/merge_brief_synthesizer
+    description: >
+      Capstone skill. Takes outputs from all upstream skills and produces the
+      final structured merge brief — recommendation, risk score, blocking issues,
+      conditions, and confidence statement. This is what the reviewer reads.
+
+input:
+  schema:
+    type: object
+    required:
+      - pr_diff
+      - changed_files
+    properties:
+      pr_diff:
+        type: string
+        description: >
+          The full unified diff of the pull request. This is the primary input
+          from which all analysis flows.
+      pr_description:
+        type: string
+        description: >
+          The PR author's description, title, and any linked issue context.
+          Used to understand stated intent versus actual code changes.
+      changed_files:
+        type: array
+        items:
+          type: string
+        description: >
+          List of file paths modified in the PR. Used for blast radius
+          estimation and risk pattern matching.
+      author_context:
+        type: object
+        description: >
+          Contextual signals about the PR author for review intensity calibration.
+        properties:
+          is_new_contributor:
+            type: boolean
+            description: Whether this is the author's first PR to this repository.
+          pr_count_in_repo:
+            type: integer
+            description: Total number of PRs the author has submitted to this repo.
+          hours_since_last_pr:
+            type: integer
+            description: >
+              Hours since the author's last PR. Rapid bursts may indicate
+              pressure-driven commits.
+      repo_context:
+        type: object
+        description: >
+          High-level context about the repository's critical modules.
+        properties:
+          has_payments_module:
+            type: boolean
+            description: Whether this repo contains payment processing logic.
+          has_auth_module:
+            type: boolean
+            description: Whether this repo contains authentication/authorization logic.
+          primary_language:
+            type: string
+            description: The primary programming language of the repository.
+
+output:
+  schema:
+    type: object
+    required:
+      - merge_brief
+      - recommendation
+      - risk_score
+      - blocking_issues
+      - confidence_level
+    properties:
+      merge_brief:
+        type: string
+        format: markdown
+        description: >
+          The full merge brief in markdown format. This is the primary output —
+          a structured document with recommendation, evidence, conditions, and
+          confidence statement.
+      recommendation:
+        type: string
+        enum:
+          - MERGE
+          - MERGE_WITH_CONDITIONS
+          - DO_NOT_MERGE
+        description: >
+          The top-level recommendation. Exactly one of three values. No
+          ambiguity, no hedging, no synonyms.
+      risk_score:
+        type: integer
+        minimum: 0
+        maximum: 100
+        description: >
+          Composite risk score from 0 (zero-risk cosmetic change) to 100
+          (actively dangerous merge). Scores above 75 must include a narrative
+          explanation of the top 3 contributing factors.
+      blocking_issues:
+        type: array
+        items:
+          type: object
+          properties:
+            location:
+              type: string
+            observation:
+              type: string
+            consequence:
+              type: string
+            required_action:
+              type: string
+        description: >
+          List of blocking findings, each following the LOCATION → OBSERVATION →
+          CONSEQUENCE → REQUIRED ACTION format.
+      confidence_level:
+        type: string
+        enum:
+          - HIGH
+          - MEDIUM
+          - LOW
+        description: >
+          Overall confidence in this assessment. HIGH requires full diff context,
+          clear patterns, and no ambiguous findings. LOW indicates missing context
+          or significant reliance on heuristics.
+
+workflows:
+  - name: full_pr_review
+    path: workflows/full_pr_review.md
+    description: >
+      The primary workflow. Runs all 7 skills in the correct sequence with
+      decision gates and produces the final merge brief.
+
+knowledge:
+  - path: knowledge/risk_patterns.md
+    description: Reference patterns for high-risk files, failure modes, and deployment timing.
+  - path: knowledge/merge_brief_examples.md
+    description: Example merge briefs demonstrating PRGuardian's output format and quality.
+
+memory:
+  runtime:
+    path: memory/runtime/
+    description: Live state maintained during a PR analysis session.

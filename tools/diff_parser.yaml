@@ -1,0 +1,201 @@
+# MCP Tool Definition: Diff Parser
+# An MCP-compatible tool that PRGuardian can invoke to extract structured data
+# from a raw unified diff.
+
+name: diff_parser
+version: 1.0.0
+description: >
+  Parses a raw unified diff into structured data. Extracts file paths, line ranges,
+  added lines, removed lines, and context lines for each file in the diff. This tool
+  provides the structured input that PRGuardian's skills operate on.
+
+type: function
+
+input_schema:
+  type: object
+  required:
+    - raw_diff
+  properties:
+    raw_diff:
+      type: string
+      description: >
+        The raw unified diff string. Expected format is the output of
+        `git diff` or equivalent — containing `---`/`+++` file headers,
+        `@@ ... @@` hunk headers, and `+`/`-`/` ` prefixed lines.
+    include_context_lines:
+      type: boolean
+      default: true
+      description: >
+        Whether to include unchanged context lines (prefixed with space)
+        in the output. Set to false to reduce output size when only
+        added/removed lines are needed.
+    max_files:
+      type: integer
+      default: 100
+      description: >
+        Maximum number of files to parse from the diff. If the diff contains
+        more files than this limit, the remaining files are listed by path
+        only (without line-level detail) in a `truncated_files` array.
+
+output_schema:
+  type: object
+  properties:
+    file_count:
+      type: integer
+      description: Total number of files in the diff.
+    total_additions:
+      type: integer
+      description: Total number of lines added across all files.
+    total_deletions:
+      type: integer
+      description: Total number of lines removed across all files.
+    files:
+      type: array
+      description: Structured data for each file in the diff.
+      items:
+        type: object
+        properties:
+          old_path:
+            type: string
+            description: >
+              Original file path (from `---` header). Value is `/dev/null`
+              for newly created files.
+          new_path:
+            type: string
+            description: >
+              New file path (from `+++` header). Value is `/dev/null`
+              for deleted files.
+          status:
+            type: string
+            enum:
+              - added
+              - modified
+              - deleted
+              - renamed
+            description: >
+              The type of change to this file.
+          additions:
+            type: integer
+            description: Number of lines added in this file.
+          deletions:
+            type: integer
+            description: Number of lines removed in this file.
+          is_binary:
+            type: boolean
+            description: >
+              Whether this file is binary. Binary files are detected by
+              the presence of "Binary files" in the diff header.
+          hunks:
+            type: array
+            description: Individual diff hunks within the file.
+            items:
+              type: object
+              properties:
+                old_start:
+                  type: integer
+                  description: Starting line number in the old file.
+                old_count:
+                  type: integer
+                  description: Number of lines from the old file in this hunk.
+                new_start:
+                  type: integer
+                  description: Starting line number in the new file.
+                new_count:
+                  type: integer
+                  description: Number of lines in the new file in this hunk.
+                header:
+                  type: string
+                  description: >
+                    The full `@@ ... @@` header line, including any function
+                    or class context after the closing `@@`.
+                lines:
+                  type: array
+                  description: Individual lines in the hunk.
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum:
+                          - addition
+                          - deletion
+                          - context
+                        description: The type of line.
+                      content:
+                        type: string
+                        description: >
+                          The line content without the leading `+`/`-`/` ` prefix.
+                      old_line_number:
+                        type: integer
+                        description: >
+                          Line number in the old file. Null for additions.
+                      new_line_number:
+                        type: integer
+                        description: >
+                          Line number in the new file. Null for deletions.
+    truncated_files:
+      type: array
+      description: >
+        Files that exceeded the max_files limit. Listed by path only.
+      items:
+        type: object
+        properties:
+          path:
+            type: string
+          status:
+            type: string
+            enum: [added, modified, deleted, renamed]
+
+errors:
+  - code: INVALID_DIFF_FORMAT
+    description: >
+      The input string could not be parsed as a unified diff. Ensure the
+      input is the output of `git diff` or equivalent.
+  - code: EMPTY_DIFF
+    description: >
+      The input string is empty or contains no diff content.
+  - code: DIFF_TOO_LARGE
+    description: >
+      The diff exceeds the maximum processable size (10MB). Provide a
+      smaller diff or increase the max_files limit to reduce per-file detail.
+
+examples:
+  - name: Simple modification
+    input:
+      raw_diff: |
+        diff --git a/src/auth/validate.ts b/src/auth/validate.ts
+        index abc123..def456 100644
+        --- a/src/auth/validate.ts
+        +++ b/src/auth/validate.ts
+        @@ -30,7 +30,7 @@ export function validateToken(token: string): boolean {
+           const config = getAuthConfig();
+        -  return jwt.verify(token, config.secret) !== null;
+        +  return jwt.verify(token, config.secret, { algorithms: ['RS256'] }) !== null;
+           }
+    output:
+      file_count: 1
+      total_additions: 1
+      total_deletions: 1
+      files:
+        - old_path: a/src/auth/validate.ts
+          new_path: b/src/auth/validate.ts
+          status: modified
+          additions: 1
+          deletions: 1
+          is_binary: false
+          hunks:
+            - old_start: 30
+              old_count: 7
+              new_start: 30
+              new_count: 7
+              lines:
+                - type: context
+                  content: "  const config = getAuthConfig();"
+                - type: deletion
+                  content: "  return jwt.verify(token, config.secret) !== null;"
+                  old_line_number: 31
+                - type: addition
+                  content: "  return jwt.verify(token, config.secret, { algorithms: ['RS256'] }) !== null;"
+                  new_line_number: 31
+                - type: context
+                  content: "  }"
