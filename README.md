@@ -233,7 +233,7 @@ prguardian-gitagent/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/prguardian-gitagent.git
+git clone https://github.com/aditya-3526/prguardian-gitagent.git
 cd prguardian-gitagent
 
 # Run with Claude adapter
@@ -252,6 +252,19 @@ npx gitagent run ./prguardian-gitagent --adapter lyzr
 pip install gitclaw
 gitclaw run ./prguardian-gitagent
 ```
+
+### Run the Demo
+
+The fastest way to see PRGuardian in action is to run the included demo scenario — PR #247, the Friday auth time bomb:
+```bash
+# Set your API key
+export ANTHROPIC_API_KEY=your_key_here   # or OPENAI_API_KEY / GEMINI_API_KEY
+
+# Run the demo
+bash demo/run_demo.sh
+```
+
+This runs PRGuardian against a synthetic PR that has passing CI, two senior approvals, and two hidden issues that will cause a production incident. PRGuardian should issue `DO_NOT_MERGE` with risk score 89/100.
 
 ### Input
 

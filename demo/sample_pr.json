@@ -1,0 +1,25 @@
+{
+  "pr_diff": "diff --git a/test/fixtures/payment_config.ts b/test/fixtures/payment_config.ts\nindex a1b2c3d..e4f5a6b 100644\n--- a/test/fixtures/payment_config.ts\n+++ b/test/fixtures/payment_config.ts\n@@ -20,6 +20,9 @@ export const TEST_CONFIG = {\n   timeout: 3000,\n   retryAttempts: 3,\n+  stripeApiKey: 'sk_live_EXAMPLE_REDACTED_KEY_HERE',\n+  stripeWebhookSecret: 'whsec_test_placeholder',\n+  environment: 'production',\n };\ndiff --git a/src/shared/auth/middleware/validateToken.ts b/src/shared/auth/middleware/validateToken.ts\nindex b2c3d4e..f5a6b7c 100644\n--- a/src/shared/auth/middleware/validateToken.ts\n+++ b/src/shared/auth/middleware/validateToken.ts\n@@ -1,12 +1,19 @@\n import { AuthProvider } from '../providers/AuthProvider';\n import { TokenPayload } from '../types';\n \n+// Cache auth config at module scope for performance\n+let cachedConfig: AuthConfig | null = null;\n+\n export async function validateToken(token: string): Promise<TokenPayload> {\n-  const config = await AuthProvider.getConfig();\n+  if (!cachedConfig) {\n+    cachedConfig = await AuthProvider.getConfig();\n+  }\n+  const config = cachedConfig;\n   return AuthProvider.verify(token, config);\n }\ndiff --git a/src/mobile/auth/tokenRefresh.ts b/src/mobile/auth/tokenRefresh.ts\nindex c3d4e5f..a6b7c8d 100644\n--- a/src/mobile/auth/tokenRefresh.ts\n+++ b/src/mobile/auth/tokenRefresh.ts\n@@ -14,7 +14,12 @@ export class MobileTokenRefresher {\n \n   async refresh(userId: string): Promise<string> {\n     const currentToken = await this.storage.getToken(userId);\n-    return this.authClient.refreshToken(currentToken);\n+    // Optimized: batch refresh requests to reduce auth provider load\n+    if (this.pendingRefreshes.has(userId)) {\n+      return this.pendingRefreshes.get(userId)!;\n+    }\n+    const refreshPromise = this.authClient.refreshToken(currentToken);\n+    this.pendingRefreshes.set(userId, refreshPromise);\n+    return refreshPromise;\n   }\n }",
+  "pr_description": "PR #247 — Optimize mobile token refresh\n\n## What does this PR do?\nOptimizes the mobile token refresh flow by batching concurrent refresh requests for the same user, reducing load on the auth provider. Also caches auth configuration to avoid repeated async calls on every token validation.\n\n## How was this tested?\nExisting auth test suite passes. Added unit test for the batching behavior.\n\n## Breaking changes?\nNo breaking changes. This is a performance optimization only.\n\n## Related issues\nCloses #189 — Mobile auth latency in high-concurrency scenarios",
+  "changed_files": [
+    "test/fixtures/payment_config.ts",
+    "src/shared/auth/middleware/validateToken.ts",
+    "src/mobile/auth/tokenRefresh.ts",
+    "src/mobile/auth/__tests__/tokenRefresh.test.ts"
+  ],
+  "author_context": {
+    "is_new_contributor": false,
+    "pr_count_in_repo": 12,
+    "hours_since_last_pr": 3,
+    "submitted_at": "2026-03-28T16:47:00Z",
+    "day_of_week": "Friday",
+    "local_hour": 16
+  },
+  "repo_context": {
+    "has_payments_module": true,
+    "has_auth_module": true,
+    "primary_language": "TypeScript",
+    "deployment_environment": "production",
+    "has_weekend_oncall": true
+  }
+}
