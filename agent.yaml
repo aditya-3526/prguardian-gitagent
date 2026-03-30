@@ -13,8 +13,7 @@ description: >
   the most consequential action in your codebase: pressing the merge button.
 
 model:
-model:
-  preferred: anthropic:claude-sonnet-4-5-20250929  
+  preferred: anthropic:claude-sonnet-4-5-20250929
   compatible:
     - claude-sonnet-4-20250514
     - gpt-4o
