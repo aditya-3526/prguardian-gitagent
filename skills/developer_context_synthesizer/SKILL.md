@@ -1,5 +1,8 @@
 # Skill: developer_context_synthesizer
-
+---
+name: developer_context_synthesizer
+description: Adjusts scrutiny level based on developer and PR context
+---
 ## Purpose
 
 This skill analyzes signals about the *developer* and the *circumstances* of the PR submission to calibrate how much scrutiny the rest of the analysis should apply. The insight is simple but important: the same 200-line diff deserves different levels of skepticism depending on who wrote it, when, and in what state. A first-time contributor touching auth code at 11 PM after six rapid commits is a very different signal from a senior maintainer making a focused change during business hours.

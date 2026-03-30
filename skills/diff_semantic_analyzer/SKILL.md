@@ -1,5 +1,8 @@
 # SKILL — Diff Semantic Analyzer
-
+---
+name: diff_semantic_analyzer
+description: Classifies changes in the PR diff into behavioral, structural, contract, or cosmetic categories
+---
 ## Purpose
 
 Classify every change in a PR diff by its **semantic type** — not by its size, file count, or line count, but by what kind of change it actually is. This classification is the foundation of all downstream risk assessment.

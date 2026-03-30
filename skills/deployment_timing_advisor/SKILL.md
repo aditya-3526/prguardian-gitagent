@@ -1,5 +1,8 @@
 # SKILL — Deployment Timing Advisor
-
+---
+name: deployment_timing_advisor
+description: Recommends optimal deployment timing based on risk and context
+---
 ## Purpose
 
 Recommend **when** to deploy a change, not just whether to merge it. A change that is technically safe to merge may be dangerous to deploy at the wrong time. A database migration on Friday at 17:00 is a different risk than the same migration on Tuesday at 10:00.

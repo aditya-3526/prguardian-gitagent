@@ -1,5 +1,8 @@
 # SKILL — Merge Brief Synthesizer
-
+---
+name: merge_brief_synthesizer
+description: Generates the final structured merge brief with recommendation and analysis
+---
 ## Purpose
 
 This is the capstone skill. It takes outputs from all upstream skills and produces the final merge brief — the single document that a reviewer reads to understand whether this PR should be merged, under what conditions, and with what confidence.

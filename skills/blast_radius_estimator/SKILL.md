@@ -1,5 +1,8 @@
 # SKILL — Blast Radius Estimator
-
+---
+name: blast_radius_estimator
+description: Estimates the scope and impact of code changes across systems and modules
+---
 ## Purpose
 
 Map the impact surface of a pull request. Determine which systems, services, modules, and user flows are affected by the changes — not just directly, but transitively. A change to a shared utility module doesn't just affect that file; it affects every file that imports it, every service that calls those files, and every user flow that touches those services.

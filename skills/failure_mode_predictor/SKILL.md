@@ -1,5 +1,8 @@
 # SKILL — Failure Mode Predictor
-
+---
+name: failure_mode_predictor
+description: Predicts potential failure scenarios that may occur after deployment
+---
 ## Purpose
 
 Generate 2–4 specific, concrete failure scenarios that could occur if the PR is merged. Not "there might be bugs." Not "consider edge cases." Specific named scenarios with causal chains, affected populations, production symptoms, and recovery paths.

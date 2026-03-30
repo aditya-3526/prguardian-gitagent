@@ -24,3 +24,4 @@ __pycache__/
 # Actual runtime state files generated during execution are not
 memory/runtime/*.tmp
 memory/runtime/*.log
+.gitagent/

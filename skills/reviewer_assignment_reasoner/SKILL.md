@@ -1,5 +1,12 @@
 # SKILL — Reviewer Assignment Reasoner
 
+---
+
+name: reviewer_assignment_reasoner
+description: Determines required reviewer expertise based on code changes
+
+---
+
 ## Purpose
 
 Determine **who** should review this PR and **why**, based on which systems were modified, what type of changes were made, and what domain expertise is required. This transforms PRGuardian from a passive analysis tool into an active workflow orchestrator.
@@ -12,29 +19,29 @@ The goal is not to assign specific people (PRGuardian doesn't have an org chart)
 
 ### Domain Expertise Requirements
 
-| Changed Area | Required Expertise | Priority |
-|-------------|-------------------|----------|
-| `auth/`, `authentication/`, `authorization/`, `session/` | **Security-aware engineer** with auth domain knowledge | 🔴 CRITICAL |
-| `payments/`, `billing/`, `checkout/`, `subscription/` | **Payments domain expert** — understands payment processor integrations, PCI implications | 🔴 CRITICAL |
-| `migrations/`, `schema/`, database-related files | **Database/platform engineer** — understands migration safety, locking, rollback | 🟠 HIGH |
-| `shared/`, `common/`, `core/`, `lib/`, `utils/` | **Platform/framework engineer** — understands cross-cutting impact | 🟠 HIGH |
-| `middleware/` | **Backend engineer** with middleware architecture knowledge | 🟠 HIGH |
-| `api/`, `routes/`, `endpoints/`, `controllers/` | **API design reviewer** — understands contract stability, versioning | 🟡 MEDIUM |
-| `config/`, `.env*`, infrastructure files | **DevOps/infrastructure engineer** | 🟡 MEDIUM |
-| `.github/workflows/`, CI/CD files | **CI/CD engineer** — understands pipeline safety | 🟡 MEDIUM |
-| `tests/`, `__tests__/`, `spec/` | **QA-aware engineer** — validates test quality, not just presence | 🟢 STANDARD |
-| Frontend components, UI files | **Frontend engineer** with component architecture knowledge | 🟢 STANDARD |
-| Documentation, README, changelog | **Any engineer** — standard review | 🟢 STANDARD |
+| Changed Area                                             | Required Expertise                                                                        | Priority    |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------- |
+| `auth/`, `authentication/`, `authorization/`, `session/` | **Security-aware engineer** with auth domain knowledge                                    | 🔴 CRITICAL |
+| `payments/`, `billing/`, `checkout/`, `subscription/`    | **Payments domain expert** — understands payment processor integrations, PCI implications | 🔴 CRITICAL |
+| `migrations/`, `schema/`, database-related files         | **Database/platform engineer** — understands migration safety, locking, rollback          | 🟠 HIGH     |
+| `shared/`, `common/`, `core/`, `lib/`, `utils/`          | **Platform/framework engineer** — understands cross-cutting impact                        | 🟠 HIGH     |
+| `middleware/`                                            | **Backend engineer** with middleware architecture knowledge                               | 🟠 HIGH     |
+| `api/`, `routes/`, `endpoints/`, `controllers/`          | **API design reviewer** — understands contract stability, versioning                      | 🟡 MEDIUM   |
+| `config/`, `.env*`, infrastructure files                 | **DevOps/infrastructure engineer**                                                        | 🟡 MEDIUM   |
+| `.github/workflows/`, CI/CD files                        | **CI/CD engineer** — understands pipeline safety                                          | 🟡 MEDIUM   |
+| `tests/`, `__tests__/`, `spec/`                          | **QA-aware engineer** — validates test quality, not just presence                         | 🟢 STANDARD |
+| Frontend components, UI files                            | **Frontend engineer** with component architecture knowledge                               | 🟢 STANDARD |
+| Documentation, README, changelog                         | **Any engineer** — standard review                                                        | 🟢 STANDARD |
 
 ### Change-Type-Based Requirements
 
-| Change Classification | Additional Requirement |
-|----------------------|----------------------|
-| BEHAVIORAL change to critical path | **Senior engineer** — behavioral changes to auth/payments require senior review regardless of file location |
-| CONTRACT change | **API contract owner** — anyone who changes a public interface needs approval from the interface owner |
-| Large diff (>500 lines of non-cosmetic changes) | **Second reviewer** — large changes benefit from two independent perspectives |
-| First-time contributor | **Mentorship reviewer** — someone familiar with codebase conventions to provide constructive guidance |
-| Cross-module change | **System architect or tech lead** — cross-module changes need someone who understands the overall system |
+| Change Classification                           | Additional Requirement                                                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| BEHAVIORAL change to critical path              | **Senior engineer** — behavioral changes to auth/payments require senior review regardless of file location |
+| CONTRACT change                                 | **API contract owner** — anyone who changes a public interface needs approval from the interface owner      |
+| Large diff (>500 lines of non-cosmetic changes) | **Second reviewer** — large changes benefit from two independent perspectives                               |
+| First-time contributor                          | **Mentorship reviewer** — someone familiar with codebase conventions to provide constructive guidance       |
+| Cross-module change                             | **System architect or tech lead** — cross-module changes need someone who understands the overall system    |
 
 ---
 
@@ -43,6 +50,7 @@ The goal is not to assign specific people (PRGuardian doesn't have an org chart)
 ### Step 1: Map Files to Review Domains
 
 For each file in the diff, match it against the domain expertise table above. Record:
+
 - Which domains are touched
 - The priority of each domain
 - How many files fall into each domain
@@ -50,6 +58,7 @@ For each file in the diff, match it against the domain expertise table above. Re
 ### Step 2: Apply Change-Type Modifiers
 
 Cross-reference with `diff_semantic_analyzer` output:
+
 - If BEHAVIORAL changes exist in critical domains (auth, payments), escalate review priority to CRITICAL
 - If CONTRACT changes exist, add API contract owner requirement
 - If the PR is cross-module, add system architect requirement
@@ -57,20 +66,21 @@ Cross-reference with `diff_semantic_analyzer` output:
 ### Step 3: Synthesize Minimum Review Requirements
 
 Produce a prioritized list of review requirements. The list should be:
+
 - **Ordered by priority** (CRITICAL → HIGH → MEDIUM → STANDARD)
 - **Deduplicated** (if auth and payments both need "security-aware engineer," list it once)
 - **Specific about why** (not just "security review needed" but "security review needed because auth middleware token validation logic changed")
 
 ### Step 4: Determine Minimum Reviewer Count
 
-| Condition | Minimum Reviewers |
-|-----------|------------------|
-| Cosmetic-only change | 1 |
-| Standard single-module change | 1 |
-| Cross-module change | 2 |
-| Critical domain change (auth/payments) | 2 (including domain expert) |
-| Large diff (>500 non-cosmetic lines) | 2 |
-| Contract-breaking change | 2 (including contract owner) |
+| Condition                              | Minimum Reviewers            |
+| -------------------------------------- | ---------------------------- |
+| Cosmetic-only change                   | 1                            |
+| Standard single-module change          | 1                            |
+| Cross-module change                    | 2                            |
+| Critical domain change (auth/payments) | 2 (including domain expert)  |
+| Large diff (>500 non-cosmetic lines)   | 2                            |
+| Contract-breaking change               | 2 (including contract owner) |
 
 ---
 
@@ -117,7 +127,7 @@ review_requirements:
     - domain: "Mobile Platform"
       reason: "Token refresh behavior may affect mobile clients. Mobile engineer review is recommended but not required if no mobile-specific code was changed."
 
-  risk_score_contribution: 5  # small contribution — reviewer assignment is a process signal, not a risk factor
+  risk_score_contribution: 5 # small contribution — reviewer assignment is a process signal, not a risk factor
 ```
 
 ---
