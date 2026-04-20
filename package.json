@@ -1,0 +1,26 @@
+{
+  "name": "prguardian",
+  "version": "2.0.0",
+  "description": "Merge consequence intelligence for pull requests — hybrid deterministic + LLM analysis",
+  "main": "analyze.js",
+  "scripts": {
+    "analyze": "node analyze.js",
+    "test": "node tests/test-runner.js",
+    "github-review": "node analyze.js --pr"
+  },
+  "keywords": [
+    "code-review",
+    "developer-tools",
+    "risk-intelligence",
+    "ci-cd",
+    "merge-safety"
+  ],
+  "author": "Aditya",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/rest": "^21.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

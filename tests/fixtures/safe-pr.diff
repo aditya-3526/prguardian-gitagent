@@ -1,0 +1,28 @@
+diff --git a/README.md b/README.md
+index abc1234..def5678 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,5 @@
+-# My Project
++# My Awesome Project
+ 
+-This is a simple project.
++This is a simple project with updated documentation.
+ 
+ ## Getting Started
+@@ -10,3 +10,5 @@
+ Run `npm install` to get started.
+ 
+ ## License
++
++MIT License — see LICENSE file for details.
+diff --git a/docs/CONTRIBUTING.md b/docs/CONTRIBUTING.md
+index 1234567..89abcde 100644
+--- a/docs/CONTRIBUTING.md
++++ b/docs/CONTRIBUTING.md
+@@ -5,4 +5,6 @@
+ 1. Fork the repository
+ 2. Create a feature branch
+ 3. Submit a pull request
++4. Ensure all tests pass
++5. Wait for code review

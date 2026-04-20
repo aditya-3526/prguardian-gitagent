@@ -1,0 +1,121 @@
+diff --git a/packages/react-dom/src/__tests__/ReactDOMForm-test.js b/packages/react-dom/src/__tests__/ReactDOMForm-test.js
+index 03b9076b3382..96021e305aef 100644
+--- a/packages/react-dom/src/__tests__/ReactDOMForm-test.js
++++ b/packages/react-dom/src/__tests__/ReactDOMForm-test.js
+@@ -2281,4 +2281,64 @@ describe('ReactDOMForm', () => {
+     await submit(formRef.current);
+     assertLog(['stringified action']);
+   });
++
++  it('form actions should retain status when nested state changes', async () => {
++    const formRef = React.createRef();
++
++    let rerenderUnrelatedStatus;
++    function UnrelatedStatus() {
++      const {pending} = useFormStatus();
++      const [counter, setCounter] = useState(0);
++      rerenderUnrelatedStatus = () => setCounter(n => n + 1);
++      Scheduler.log(`[unrelated form] pending: ${pending}, state: ${counter}`);
++    }
++
++    let rerenderTargetStatus;
++    function TargetStatus() {
++      const {pending} = useFormStatus();
++      const [counter, setCounter] = useState(0);
++      Scheduler.log(`[target form] pending: ${pending}, state: ${counter}`);
++      rerenderTargetStatus = () => setCounter(n => n + 1);
++    }
++
++    function App() {
++      async function action() {
++        return new Promise(resolve => {
++          // never resolves
++        });
++      }
++
++      return (
++        <>
++          <form action={action} ref={formRef}>
++            <input type="submit" />
++            <TargetStatus />
++          </form>
++          <form>
++            <UnrelatedStatus />
++          </form>
++        </>
++      );
++    }
++
++    const root = ReactDOMClient.createRoot(container);
++    await act(() => root.render(<App />));
++
++    assertLog([
++      '[target form] pending: false, state: 0',
++      '[unrelated form] pending: false, state: 0',
++    ]);
++
++    await submit(formRef.current);
++
++    assertLog(['[target form] pending: true, state: 0']);
++
++    await act(() => rerenderTargetStatus());
++
++    assertLog(['[target form] pending: true, state: 1']);
++
++    await act(() => rerenderUnrelatedStatus());
++
++    assertLog(['[unrelated form] pending: false, state: 1']);
++  });
+ });
+diff --git a/packages/react-reconciler/src/ReactFiberBeginWork.js b/packages/react-reconciler/src/ReactFiberBeginWork.js
+index 7020af6e0435..ba401a55d4b0 100644
+--- a/packages/react-reconciler/src/ReactFiberBeginWork.js
++++ b/packages/react-reconciler/src/ReactFiberBeginWork.js
+@@ -1974,7 +1974,7 @@ function updateHostComponent(
+     // If the transition state changed, propagate the change to all the
+     // descendents. We use Context as an implementation detail for this.
+     //
+-    // This is intentionally set here instead of pushHostContext because
++    // We need to update it here because
+     // pushHostContext gets called before we process the state hook, to avoid
+     // a state mismatch in the event that something suspends.
+     //
+diff --git a/packages/react-reconciler/src/ReactFiberHostContext.js b/packages/react-reconciler/src/ReactFiberHostContext.js
+index 10ea377fc2b3..2d2ec4c88acd 100644
+--- a/packages/react-reconciler/src/ReactFiberHostContext.js
++++ b/packages/react-reconciler/src/ReactFiberHostContext.js
+@@ -9,7 +9,11 @@
+ 
+ import type {Fiber} from './ReactInternalTypes';
+ import type {StackCursor} from './ReactFiberStack';
+-import type {Container, HostContext} from './ReactFiberConfig';
++import type {
++  Container,
++  HostContext,
++  TransitionStatus,
++} from './ReactFiberConfig';
+ import type {Hook} from './ReactFiberHooks';
+ 
+ import {
+@@ -92,6 +96,21 @@ function getHostContext(): HostContext {
+ function pushHostContext(fiber: Fiber): void {
+   const stateHook: Hook | null = fiber.memoizedState;
+   if (stateHook !== null) {
++    // Propagate the current state to all the descendents.
++    // We use Context as an implementation detail for this.
++    //
++    // NOTE: This assumes that there cannot be nested transition providers,
++    // because the only renderer that implements this feature is React DOM,
++    // and forms cannot be nested. If we did support nested providers, then
++    // we would need to push a context value even for host fibers that
++    // haven't been upgraded yet.
++    const transitionStatus: TransitionStatus = stateHook.memoizedState;
++    if (isPrimaryRenderer) {
++      HostTransitionContext._currentValue = transitionStatus;
++    } else {
++      HostTransitionContext._currentValue2 = transitionStatus;
++    }
++
+     // Only provide context if this fiber has been upgraded by a host
+     // transition. We use the same optimization for regular host context below.
+     push(hostTransitionProviderCursor, fiber, fiber);

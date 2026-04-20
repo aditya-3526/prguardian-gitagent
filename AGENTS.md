@@ -40,13 +40,21 @@ PRGuardian expects the following input. Handle partial inputs as specified.
 Follow the workflow defined in `workflows/full_pr_review.md`. The summary execution order is:
 
 ```
-┌─────────────────────────────┐
-│ 1. diff_semantic_analyzer   │ ← ALWAYS FIRST
-└──────────┬──────────────────┘
+┌─────────────────────────────────┐
+│ 0. deterministic_signals        │ ← CODE (runs before LLM)
+│    diff-parser, secret-detector │
+│    sensitive-files, diff-metrics │
+│    risk-engine                   │
+└──────────┬──────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────┐
+│ 1. diff_semantic_analyzer       │ ← LLM SKILL (receives signals)
+└──────────┬──────────────────────┘
            │
            ▼
      ┌─────────────┐
-     │  Cosmetic    │──── YES ───▶ Skip to step 6
+     │  Cosmetic    │──── YES ───▶ Skip to step 7
      │   only?      │             (merge_brief_synthesizer
      └──────┬───────┘              with LOW risk)
             │ NO
@@ -56,23 +64,52 @@ Follow the workflow defined in `workflows/full_pr_review.md`. The summary execut
 │ 3. failure_mode_predictor                 │ ← PARALLEL
 └───────────────────┬───────────────────────┘
                     ▼
-┌─────────────────────────────┐
-│ 4. developer_context_synth  │ ← IF author_context provided
-└──────────┬──────────────────┘
+┌─────────────────────────────────┐
+│ 4. developer_context_synth      │ ← IF author_context provided
+└──────────┬──────────────────────┘
            ▼
-┌─────────────────────────────┐
-│ 5. deployment_timing_advisor│
-└──────────┬──────────────────┘
+┌─────────────────────────────────┐
+│ 5. deployment_timing_advisor    │
+└──────────┬──────────────────────┘
            ▼
-┌─────────────────────────────┐
-│ 6. reviewer_assignment      │
-│    _reasoner                │
-└──────────┬──────────────────┘
+┌─────────────────────────────────┐
+│ 6. reviewer_assignment_reasoner │
+└──────────┬──────────────────────┘
            ▼
-┌─────────────────────────────┐
-│ 7. merge_brief_synthesizer  │ ← ALWAYS LAST
-└─────────────────────────────┘
+┌─────────────────────────────────┐
+│ 7. merge_brief_synthesizer      │ ← ALWAYS LAST (LLM skill)
+└──────────┬──────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────┐
+│ 8. enforceHardConstraints()     │ ← CODE (runs after LLM)
+│    + calibrateConfidence()      │
+│    • secrets → DO_NOT_MERGE     │
+│    • risk_score immutable       │
+│    • recommendation floor       │
+│    • confidence calibration     │
+└─────────────────────────────────┘
 ```
+
+### Hybrid Architecture: Authority Boundaries
+
+PRGuardian uses a hybrid deterministic + LLM architecture. The deterministic code layer handles pattern matching (regex for secrets, glob for file classification, arithmetic for scoring) and has **final authority** over hard decisions. The LLM layer handles reasoning (consequence prediction, failure mode modeling) and is **advisory**.
+
+| Deterministic (Authoritative) | LLM Skills (Advisory) |
+|-------------------------------|----------------------|
+| ✅ Secret detection | ✅ Consequence prediction |
+| ✅ Risk score (immutable) | ✅ Failure mode modeling |
+| ✅ Sensitive file flags | ✅ Explain risk factors |
+| ✅ Diff metrics | ✅ Deployment timing reasoning |
+| ✅ Blocking issue triggers | ✅ Reviewer recommendations |
+| ✅ Final recommendation (enforcement) | ✅ Merge brief prose |
+| ✅ Confidence floor | ❌ Cannot change risk score |
+| | ❌ Cannot dismiss secrets |
+| | ❌ Cannot upgrade recommendation |
+
+### Graceful Degradation
+
+If the LLM layer fails (API error, timeout, missing API key), PRGuardian falls back to deterministic-only analysis. The deterministic layer always returns a valid result with risk score, recommendation, and blocking issues. The merge brief will note that LLM reasoning was unavailable.
 
 ### Parallel Execution
 

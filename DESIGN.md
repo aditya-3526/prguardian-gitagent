@@ -59,3 +59,37 @@ Scope decisions — what an agent refuses to do — are as important as what it 
 **It does not issue final merge approval.** The MERGE recommendation is a recommendation, not a command. Human judgment on product intent and business correctness is always required. PRGuardian makes the human's decision better-informed; it does not replace it.
 
 These non-scopes are documented in `DUTIES.md` and stated explicitly in every merge brief. This is intentional: an agent that is clear about its limits is one that can be trusted within them.
+
+---
+
+## Why Hybrid Architecture (Deterministic + LLM)
+
+PRGuardian v2 uses a hybrid architecture where deterministic code modules run before and after LLM-based skill reasoning. This is not an incremental improvement — it is a fundamental design decision that addresses the weaknesses of each approach in isolation.
+
+### Deterministic layer alone is insufficient
+
+Regex can detect that `sk_live_abc123` is a Stripe key, but it cannot predict that the key's location in a test fixture means it will end up in Git history accessible to anyone with repo read access. It cannot model the failure scenario where an attacker uses the key to issue fraudulent charges. Pattern matching finds the signal; it cannot reason about the consequence.
+
+A deterministic-only system would catch secrets and categorize files, but would produce mechanical risk scores with no explanatory power. The engineer would know the score but not the *why* — which is the difference between a useful decision-support tool and a dashboard of numbers.
+
+### LLM layer alone is unreliable
+
+An LLM can miss a secret pattern that a regex catches 100% of the time. It can hallucinate a risk score of 45 when the objective signals warrant 85. It can be persuaded by a well-written PR description that says "no breaking changes" while the diff clearly shows one. LLMs reason well but enforce poorly — and in security-critical decisions, enforcement cannot be optional.
+
+Prior to v2, PRGuardian was entirely LLM-driven. The risk score was a number the LLM estimated. The secret detection was whatever the LLM noticed. This created consistency problems: the same diff analyzed twice could produce different scores.
+
+### The hybrid approach combines reliability with intelligence
+
+| Layer | Provides | Cannot Provide |
+|-------|----------|----------------|
+| **Deterministic** | Precision (regex catches patterns LLMs miss), Consistency (same input → same score), Enforceability (hard constraints cannot be argued away), Speed (runs in milliseconds) | Reasoning, context awareness, natural language explanation |
+| **LLM** | Reasoning (consequence prediction from code context), Scenario modeling (failure modes with causal chains), Natural language (merge briefs that humans want to read), Judgment (deployment timing nuance, reviewer recommendations) | Consistency, enforcement, precision on pattern matching |
+| **Enforcement** | Prevents the LLM from undermining deterministic findings | Cannot add new findings — only enforces existing signals |
+
+The enforcement layer is the critical innovation. It ensures the system's floor of quality never drops below what code can guarantee. If the LLM reasons brilliantly, the output is brilliant. If the LLM hallucinates, the hard constraints still hold. The system degrades gracefully rather than catastrophically.
+
+### Graceful degradation
+
+If the LLM fails entirely (API timeout, authentication error, rate limit), PRGuardian still returns a valid result: deterministic risk score, secret detections, file classifications, and a machine-generated merge brief. The confidence level is set to MEDIUM to reflect that LLM reasoning was unavailable, but the risk assessment is still reliable.
+
+This means PRGuardian never blocks a CI/CD pipeline with an error — it always returns an actionable result.

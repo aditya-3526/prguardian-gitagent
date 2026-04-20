@@ -2,15 +2,16 @@
   <h1 align="center">🛡️ PRGuardian</h1>
   <p align="center"><strong>Merge Consequence Intelligence</strong></p>
   <p align="center">
-    PRGuardian analyzes PR diffs to predict merge consequences, estimate blast radius,<br/>
-    model failure scenarios, and issue a structured merge brief — so engineers make<br/>
-    better merge decisions faster.
+    A hybrid deterministic + LLM agent that analyzes PR diffs to predict merge consequences,<br/>
+    detect hardcoded secrets, estimate blast radius, model failure scenarios,<br/>
+    and produce structured merge briefs — so engineers make better merge decisions faster.
   </p>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/gitagent-v1.0.0-blue?style=flat-square" alt="GitAgent v1.0.0"/>
-  <img src="https://img.shields.io/badge/model-claude--sonnet--4-purple?style=flat-square" alt="Claude Sonnet 4"/>
+  <img src="https://img.shields.io/badge/architecture-hybrid-blueviolet?style=flat-square" alt="Hybrid Architecture"/>
+  <img src="https://img.shields.io/badge/tests-76%2F76_passing-brightgreen?style=flat-square" alt="76/76 Tests Passing"/>
   <img src="https://img.shields.io/badge/skills-7-green?style=flat-square" alt="7 Skills"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
 </p>
@@ -42,86 +43,373 @@ For every PR, PRGuardian produces a **merge brief**: a structured document conta
 | Output | Description |
 |--------|-------------|
 | **Recommendation** | `MERGE` / `MERGE_WITH_CONDITIONS` / `DO_NOT_MERGE` — clear and unambiguous |
-| **Risk Score** | 0–100 composite score with factor breakdown |
-| **Failure Scenarios** | 2–4 specific, named scenarios with triggers, impact, and recovery paths |
+| **Risk Score** | 0–100 composite score with weighted factor breakdown |
+| **Blocking Issues** | Hardcoded secrets, credential leaks — with exact file, line, and remediation steps |
 | **Blast Radius Map** | Which systems, services, and user flows are affected |
-| **Deployment Timing** | When to deploy (not just whether to merge), accounting for day/time risk |
-| **Review Requirements** | What expertise is needed to review this PR and why |
+| **Failure Scenarios** | Named scenarios with triggers, impact, and recovery paths |
+| **Deployment Timing** | When to deploy, accounting for day/time risk |
 | **Confidence Level** | How much to trust this assessment, with explicit basis |
+
+---
+
+## Hybrid Architecture
+
+PRGuardian v2 uses a **hybrid deterministic + LLM architecture**. Deterministic code handles pattern matching, secret detection, and risk scoring with absolute authority. LLM skills handle consequence reasoning, failure mode modeling, and natural language synthesis as advisory input.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  CLI / GitHub Action / GitAgent Runtime                  │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  PHASE 1: DETERMINISTIC ANALYSIS (Authoritative)        │
+│                                                         │
+│  diff-parser ──▶ secret-detector ──▶ sensitive-files    │
+│                         │                                │
+│                   diff-metrics ──▶ risk-engine           │
+│                                                         │
+│  Output: deterministic_signals JSON (immutable)          │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  PHASE 2: LLM REASONING (Advisory)                      │
+│                                                         │
+│  Receives deterministic signals as primary input.        │
+│  Skills: diff_semantic_analyzer, blast_radius_estimator, │
+│  failure_mode_predictor, deployment_timing_advisor,      │
+│  reviewer_assignment_reasoner, merge_brief_synthesizer   │
+│                                                         │
+│  ⚡ Graceful degradation: if LLM fails, the system      │
+│  falls back to deterministic-only analysis automatically │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  PHASE 3: ENFORCEMENT + CALIBRATION (Authoritative)     │
+│                                                         │
+│  • Secrets detected → force DO_NOT_MERGE (non-negotiable)│
+│  • Risk score is immutable (LLM cannot override)         │
+│  • Recommendations can only be downgraded, never upgraded│
+│  • Confidence calibrated against signal strength         │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  PHASE 4: STRUCTURED OUTPUT                              │
+│                                                         │
+│  Merge Brief (markdown) + JSON signals + Exit Code       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Authority Boundaries
+
+The key design decision: deterministic code has **final authority** over hard decisions. LLM skills are **advisory only**.
+
+| Deterministic (Authoritative) | LLM Skills (Advisory) |
+|-------------------------------|----------------------|
+| ✅ Secret detection (regex, 14 patterns) | ✅ Consequence prediction |
+| ✅ Risk score (weighted, immutable) | ✅ Failure mode modeling |
+| ✅ Sensitive file classification | ✅ Blast radius reasoning |
+| ✅ Diff metrics computation | ✅ Deployment timing context |
+| ✅ Hard constraint enforcement | ✅ Reviewer recommendations |
+| ✅ Confidence floor calibration | ✅ Merge brief prose |
+| ✅ Blocking issue triggers | ❌ Cannot change risk score |
+|  | ❌ Cannot dismiss secrets |
+|  | ❌ Cannot upgrade recommendation |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js 18+**
+- **npm** (for installing dependencies)
+
+### Installation
+
+```bash
+git clone https://github.com/aditya-3526/prguardian-gitagent.git
+cd prguardian-gitagent
+npm install
+```
+
+### CLI Usage
+
+PRGuardian ships with a standalone CLI (`analyze.js`) that runs the full deterministic pipeline without requiring any API keys or external services:
+
+```bash
+# Analyze a diff file — outputs a formatted merge brief
+node analyze.js path/to/pr.diff
+
+# Analyze a JSON input file (diff + metadata)
+node analyze.js demo/sample_pr.json
+
+# Output structured JSON instead of markdown
+node analyze.js path/to/pr.diff --json
+
+# Pipe a diff from stdin
+git diff main..feature | node analyze.js --stdin
+
+# Fetch and analyze a GitHub PR directly (requires GITHUB_TOKEN)
+export GITHUB_TOKEN=ghp_xxxxx
+node analyze.js --pr facebook/react#36310
+
+# Enable verbose logging
+node analyze.js path/to/pr.diff --verbose
+
+# Persist logs to logs/ directory
+node analyze.js path/to/pr.diff --log
+```
+
+### Exit Codes
+
+The CLI returns meaningful exit codes for CI/CD integration:
+
+| Exit Code | Meaning |
+|:---------:|---------|
+| `0` | `MERGE` — safe to merge |
+| `1` | `MERGE_WITH_CONDITIONS` — merge after addressing conditions |
+| `2` | `DO_NOT_MERGE` — blocking issues found |
+| `3` | Error — analysis could not complete |
+
+### GitAgent Runtime
+
+When used with the GitAgent framework, PRGuardian activates the full LLM reasoning layer:
+
+```bash
+# Claude adapter
+npx gitagent run ./prguardian-gitagent --adapter claude
+
+# OpenAI adapter
+npx gitagent run ./prguardian-gitagent --adapter openai
+
+# Gemini adapter
+npx gitagent run ./prguardian-gitagent --adapter gemini
+
+# Lyzr adapter
+npx gitagent run ./prguardian-gitagent --adapter lyzr
+
+# Python SDK
+pip install gitclaw
+gitclaw run ./prguardian-gitagent
+```
+
+---
+
+## GitHub Action
+
+PRGuardian includes a GitHub Action workflow that automatically analyzes every PR and posts the merge brief as a comment:
+
+```yaml
+# .github/workflows/prguardian.yml — already included in the repo
+name: PRGuardian Analysis
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Fetch PR diff and analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node analyze.js --pr ${{ github.repository }}#${{ github.event.pull_request.number }} --json > result.json
+          # Comment is auto-posted by the comment-poster module
+```
+
+The comment poster is **idempotent** — it finds and updates the existing PRGuardian comment instead of creating duplicates on each push.
 
 ---
 
 ## Sample Merge Brief
 
-> This is what PRGuardian produces. This is a real-format example for a PR that looks innocent but contains two blocking issues.
+> This is what PRGuardian produces when it detects a real secret leak. This output was generated by the deterministic pipeline analyzing the included `secret-leak.diff` test fixture.
 
 ---
 
 ### PRGuardian Merge Brief
 
-**PR:** #247 — Optimize mobile token refresh
-**Analyzed:** 2026-03-28T16:47:00Z (Friday, 16:47 local time)
-**Files Changed:** 4
-**Non-Cosmetic Lines:** 74
+**Analyzed:** 2026-04-20 (Monday, 23:07 local time)
+**Files Changed:** 3
+**Lines Changed:** +10 / -3 (SMALL)
 
 ---
 
 #### Recommendation: DO_NOT_MERGE
 
-**Risk Score:** 89/100
-**Primary Reason:** Hardcoded Stripe API key detected in test configuration with production key prefix, combined with undocumented behavioral change to shared auth middleware.
+**Risk Score:** 72/100
+**Primary Reason:** Hard constraint triggered — SECRET_DETECTED.
 
 ---
 
 #### Blocking Issues
 
-**Issue 1: Hardcoded API Key**
+**Issue 1: PostgreSQL Connection URI**
 
 | Element | Detail |
 |---------|--------|
-| **LOCATION** | `test/fixtures/payment_config.ts:L23` |
-| **OBSERVATION** | String matching Stripe live key pattern (`sk_live_...`) assigned to constant |
-| **CONSEQUENCE** | Key permanently embedded in Git history; extractable by anyone with repo read access |
-| **REQUIRED ACTION** | Remove key, rotate in Stripe dashboard, replace with `process.env.STRIPE_API_KEY` |
+| **LOCATION** | `src/config/database.ts:L2` |
+| **OBSERVATION** | PostgreSQL Connection URI detected. Content: `postgres****123@` |
+| **CONSEQUENCE** | If merged, this credential will be permanently embedded in Git history. Any user with repository read access can extract it. |
+| **REQUIRED ACTION** | (1) Remove the hardcoded credential. (2) Rotate immediately. (3) Replace with environment variable. |
 
 **Confidence:** CONFIRMED
 
-**Issue 2: Auth Middleware Behavioral Change**
+**Issue 2: AWS Access Key**
 
 | Element | Detail |
 |---------|--------|
-| **LOCATION** | `src/shared/auth/middleware/validateToken.ts:L31-L38` |
-| **OBSERVATION** | Token validation now caches auth config in module scope; config changes require restart |
-| **CONSEQUENCE** | After auth provider key rotation (every 24–72h), tokens signed with new keys are rejected by instances holding stale cache |
-| **REQUIRED ACTION** | Add TTL to cache (recommended: 5 min), add test for config rotation handling |
+| **LOCATION** | `src/services/payment/stripe-handler.ts:L1` |
+| **OBSERVATION** | AWS Access Key detected. Content: `AKIAI44Q****KTOQ` |
+| **CONSEQUENCE** | If merged, this credential will be permanently embedded in Git history. |
+| **REQUIRED ACTION** | (1) Remove. (2) Rotate in AWS IAM. (3) Replace with environment variable. |
 
-**Confidence:** HIGH CONFIDENCE
-
----
-
-#### Failure Scenario: Progressive Token Rejection
-
-> On Friday at 16:47, PR #247 was merged. The change introduced caching of auth provider configuration in the shared token validation middleware.
->
-> On Saturday at 14:00, the auth provider performed its scheduled key rotation. New tokens were signed with the rotated key. Service instances running since Friday's deploy still held the pre-rotation configuration in cache.
->
-> By Saturday at 14:30, the authentication failure rate reached 12%. Mobile clients experienced forced logouts. The on-call engineer investigated but saw no recent deploys and initially attributed the spike to an auth provider issue.
->
-> The root cause was identified at 15:40 when a second engineer found the `cachedConfig` variable in the Friday diff. Rolling restart completed at 15:58.
->
-> **Impact:** ~4,200 users experienced authentication failures over 90 minutes. No data loss.
+**Confidence:** CONFIRMED
 
 ---
 
-#### Deployment Timing
+#### Risk Score Breakdown
 
-⛔ **DO NOT DEPLOY.** Friday 16:47 is the worst possible deployment window for auth middleware changes. Weekend on-call coverage is reduced. Auth failures would compound over the weekend.
+| Factor | Contribution | Max | Detail |
+|--------|:-----------:|:---:|--------|
+| Security Risk | +40 | 40 | 2 secret(s) detected; payment module modified |
+| Blast Radius | +25 | 25 | 2 sensitive files: 1 HIGH, 1 CRITICAL |
+| Change Complexity | +2 | 20 | SMALL change (13 lines), 1 file type |
+| Deployment Timing | +5 | 15 | Late night deployment window |
+| **Total** | **72** | **100** | |
 
 ---
 
-**Confidence in this assessment: HIGH.** Basis: Both blocking issues are directly visible in the diff with clear causal chains to production failure modes.
+## Secret Detection
 
-*This analysis covers technical consequence prediction only. Business logic validation, product intent review, and final merge authority remain with the engineering team.*
+PRGuardian's deterministic layer scans every added line for 14 secret patterns:
+
+| Pattern | Example Match |
+|---------|--------------|
+| AWS Access Key | `AKIAIOSFODNN7EXAMPLE` |
+| AWS Secret Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
+| Stripe Live Key | `sk_live_4eC39HqLyj...` (masked) |
+| GitHub Token | `ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| Private Key Block | `-----BEGIN RSA PRIVATE KEY-----` |
+| PostgreSQL URI | `postgresql://user:pass@host:5432/db` |
+| MongoDB URI | `mongodb+srv://user:pass@cluster.mongodb.net` |
+| JWT Token | `eyJhbGciOiJIUzI1NiIs...` |
+| Generic API Key | `api_key = "sk-proj-..."` |
+| Google API Key | `AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| Slack Token | `xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx` |
+| SendGrid Key | `SG.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| Twilio Auth Token | 32-character hex in Twilio context |
+| Generic Secret | `secret = "..."` assignments |
+
+### False Positive Filtering
+
+The detector uses a two-tier filtering system to maintain precision:
+
+1. **Value-level filtering** — matched credential values containing `EXAMPLE`, `placeholder`, `test`, `sample`, `dummy`, `fake`, `xxx`, `000`, `REDACTED`, `changeme`, or `TODO` are discarded.
+
+2. **Source-level filtering** — lines sourcing from `process.env`, `os.environ`, `System.getenv`, `ENV["..."]`, or other environment variable patterns are excluded.
+
+This ensures the AWS documentation key `AKIAIOSFODNN7EXAMPLE` is correctly filtered (because the *matched value* contains "EXAMPLE"), while a real key like `AKIAI44QH8DHBFNRKTOQ` on a line that happens to say "example usage" is **not** filtered — because the check examines the credential value, not the surrounding text.
+
+---
+
+## Risk Scoring Engine
+
+The risk engine computes a weighted composite score from 4 factors:
+
+| Factor | Weight | What It Measures |
+|--------|:------:|-----------------|
+| **Security Risk** | 40 | Secrets detected, auth/payment module changes |
+| **Blast Radius** | 25 | Number and criticality of sensitive files |
+| **Change Complexity** | 20 | Lines changed, file count, language diversity |
+| **Deployment Timing** | 15 | Day-of-week and time-of-day risk multipliers |
+
+### Recommendation Thresholds
+
+| Score Range | Recommendation |
+|:-----------:|---------------|
+| 0–29 | `MERGE` |
+| 30–59 | `MERGE_WITH_CONDITIONS` |
+| 60–100 | `DO_NOT_MERGE` |
+
+Hard constraints override thresholds: any detected secret forces `DO_NOT_MERGE` regardless of score.
+
+### File Classification
+
+Every changed file is classified into a risk category:
+
+| Category | Risk Factor | Examples |
+|----------|:-----------:|---------|
+| **CRITICAL** | +25 | `src/auth/`, `src/payments/`, middleware, `.env` files |
+| **HIGH** | +15 | `config/`, `migrations/`, `shared/`, API routes |
+| **MODERATE** | +5 | `services/`, `controllers/`, `models/` |
+| **LOW** | 0 | `tests/`, `docs/`, `README.md`, `.gitignore` |
+
+---
+
+## Real-World Validation
+
+PRGuardian was validated against 3 real, public GitHub PRs from `facebook/react`:
+
+| PR | Description | PRGuardian | Actual | Verdict |
+|-----|------------|:----------:|:------:|:-------:|
+| [#36308](https://github.com/facebook/react/pull/36308) | Changelog update | MERGE (12) | Merged in 19 min | ✅ Correct |
+| [#36148](https://github.com/facebook/react/pull/36148) | Add iframe attribute | MERGE (22) | Merged after 25-day review | ⚠️ Partial |
+| [#34075](https://github.com/facebook/react/pull/34075) | Core Fiber bug fix | MERGE (13) | Merged after 110-day review | ❌ Missed |
+
+**Key insight:** The deterministic layer excels at catching secrets and classifying application-level risk patterns. It correctly produces zero false positives. However, it cannot assess *semantic* risk — the difference between adding a line to a README and adding a line to the React Fiber reconciler. This is exactly the gap the LLM reasoning layer is designed to fill.
+
+Full validation report with detailed analysis of each PR is available in the repository.
+
+---
+
+## Test Suite
+
+PRGuardian includes a comprehensive deterministic test suite — **76 tests, 0 dependencies outside Node.js**:
+
+```bash
+node tests/test-runner.js
+```
+
+```
+╔══════════════════════════════════════════════════════╗
+║       🛡️  PRGuardian — Deterministic Test Suite      ║
+╚══════════════════════════════════════════════════════╝
+
+  ── Diff Parser ────────────────────── 12/12 ✅
+  ── Secret Detector ────────────────── 5/5   ✅
+  ── Sensitive File Detector ────────── 12/12 ✅
+  ── Diff Metrics ───────────────────── 6/6   ✅
+  ── Risk Engine ────────────────────── 11/11 ✅
+  ── Enforcement Layer ──────────────── 6/6   ✅
+  ── Confidence Calibration ─────────── 5/5   ✅
+  ── Graceful Degradation ───────────── 7/7   ✅
+  ── End-to-End Integration ─────────── 12/12 ✅
+
+══════════════════════════════════════════════════════
+  Results: 76/76 passed, 0 failed
+  🎉 All tests passed!
+══════════════════════════════════════════════════════
+```
+
+Test fixtures include:
+- `safe-pr.diff` — README + docs change → expects MERGE, score < 15
+- `secret-leak.diff` — PostgreSQL URI + AWS key → expects DO_NOT_MERGE, score > 60
+- `auth-change.diff` — Auth middleware + migration + MFA → expects score > 25
+- `demo/sample_pr.json` — Full JSON input with placeholder secrets → expects correct filtering
 
 ---
 
@@ -129,64 +417,14 @@ For every PR, PRGuardian produces a **merge brief**: a structured document conta
 
 | Tool | What It Checks | What It Misses |
 |------|---------------|----------------|
-| **Linters** (ESLint, Pylint) | Style rules, syntax patterns | Whether the code change will break production |
-| **CI Tests** | Whether existing tests pass | Whether the right tests exist, and what happens to systems not covered by tests |
-| **Coverage Tools** | Percentage of lines covered | Whether the covered lines test the right things |
-| **Static Analysis** (SonarQube) | Code smell patterns, complexity metrics | Downstream consequences, blast radius, deployment timing |
+| **Linters** | Style rules, syntax | Whether the code will break production |
+| **CI Tests** | Whether existing tests pass | Whether the right tests exist |
+| **Coverage Tools** | Percentage of lines covered | Whether covered lines test the right things |
+| **Static Analysis** | Code smells, complexity | Downstream consequences, blast radius, timing |
+| **Secret Scanners** | Known secret patterns | Blast radius, deployment risk, consequence modeling |
 | **PRGuardian** | **What happens if you merge this** | Business logic correctness (explicitly out of scope) |
 
 PRGuardian doesn't replace any of these tools. It adds a layer that none of them provide: **consequence prediction**. It reasons about the diff the way a staff engineer would — asking "what breaks downstream?" and "what happens at 2 AM Saturday?" instead of "does this line follow our naming convention?"
-
----
-
-## Skill Architecture
-
-PRGuardian uses 7 modular skills, executed in a defined sequence:
-
-```
-                    ┌──────────────────────────────┐
-                    │   1. Diff Semantic Analyzer   │
-                    │   (classify change types)     │
-                    └──────────┬───────────────────┘
-                               │
-                    ┌──────────▼───────────────────┐
-                    │     Cosmetic only?            │
-                    │   YES → Skip to Brief (LOW)   │
-                    │   NO  → Continue              │
-                    └──────────┬───────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                                 ▼
-┌─────────────────────┐           ┌─────────────────────┐
-│ 2. Blast Radius     │           │ 3. Failure Mode     │
-│    Estimator        │           │    Predictor        │
-│  (map impact)       │           │  (model failures)   │
-└─────────┬───────────┘           └─────────┬───────────┘
-          └────────────────┬────────────────┘
-                           ▼
-              ┌─────────────────────┐
-              │ 4. Developer Context│
-              │    Synthesizer      │
-              └─────────┬───────────┘
-                        ▼
-              ┌─────────────────────┐
-              │ 5. Deployment       │
-              │    Timing Advisor   │
-              └─────────┬───────────┘
-                        ▼
-              ┌─────────────────────┐
-              │ 6. Reviewer         │
-              │    Assignment       │
-              └─────────┬───────────┘
-                        ▼
-              ┌─────────────────────┐
-              │ 7. Merge Brief      │
-              │    Synthesizer      │
-              │  (final output)     │
-              └─────────────────────┘
-```
-
-Each skill has a complete `SKILL.md` with operational procedures, output formats, and edge case handling. See the `skills/` directory for details.
 
 ---
 
@@ -194,140 +432,87 @@ Each skill has a complete `SKILL.md` with operational procedures, output formats
 
 ```
 prguardian-gitagent/
-├── agent.yaml                              # GitAgent manifest
-├── SOUL.md                                 # Identity, values, communication style
-├── RULES.md                                # Hard behavioral constraints
-├── DUTIES.md                               # Segregation of duties & handoff protocol
-├── AGENTS.md                               # Framework-agnostic runtime instructions
-├── README.md                               # This file
-├── skills/
-│   ├── diff_semantic_analyzer/SKILL.md     # Classify change types in the diff
-│   ├── blast_radius_estimator/SKILL.md     # Map impact surface
-│   ├── failure_mode_predictor/SKILL.md     # Generate failure scenarios
-│   ├── deployment_timing_advisor/SKILL.md  # Recommend deployment windows
-│   ├── reviewer_assignment_reasoner/SKILL.md # Determine review requirements
-│   ├── developer_context_synthesizer/SKILL.md # Calibrate review scrutiny
-│   └── merge_brief_synthesizer/SKILL.md    # Produce the final merge brief
-├── tools/
-│   └── diff_parser.yaml                    # MCP tool: parse unified diffs
+├── agent.yaml                           # GitAgent manifest (skills, inputs, outputs)
+├── analyze.js                           # CLI entry point
+├── package.json                         # Node.js manifest
+│
+├── src/                                 # Deterministic analysis layer
+│   ├── index.js                         # 4-phase orchestrator
+│   ├── enforcement.js                   # Post-LLM hard constraint enforcer
+│   ├── logger.js                        # Structured logging
+│   ├── analyzers/
+│   │   ├── diff-parser.js               # Unified diff parser
+│   │   ├── secret-detector.js           # Regex-based secret scanner (14 patterns)
+│   │   ├── sensitive-files.js           # File risk classifier
+│   │   └── diff-metrics.js             # Change size, language, type analysis
+│   ├── scoring/
+│   │   └── risk-engine.js              # Weighted risk scoring (0-100)
+│   └── github/
+│       ├── pr-fetcher.js               # GitHub API diff fetcher
+│       └── comment-poster.js           # Idempotent PR comment poster
+│
+├── skills/                              # LLM skill definitions
+│   ├── diff_semantic_analyzer/          # Classify change types
+│   ├── blast_radius_estimator/          # Map impact surface
+│   ├── failure_mode_predictor/          # Generate failure scenarios
+│   ├── deployment_timing_advisor/       # Recommend deployment windows
+│   ├── reviewer_assignment_reasoner/    # Determine review requirements
+│   ├── developer_context_synthesizer/   # Calibrate review scrutiny
+│   └── merge_brief_synthesizer/        # Produce final merge brief
+│
+├── tests/
+│   ├── test-runner.js                  # 76-test deterministic suite
+│   ├── fixtures/                       # Test diff fixtures
+│   └── real-world/                     # Real GitHub PR diffs
+│
 ├── workflows/
-│   └── full_pr_review.md                   # Complete PR review playbook
+│   └── full_pr_review.md               # Complete PR review playbook
 ├── knowledge/
-│   ├── risk_patterns.md                    # High-risk file patterns & failure templates
-│   └── merge_brief_examples.md             # Example merge briefs
-└── memory/
-    └── runtime/
-        └── context.md                      # Runtime session state template
+│   ├── risk_patterns.md                # High-risk patterns & failure templates
+│   └── merge_brief_examples.md         # Example merge briefs
+├── .github/workflows/
+│   └── prguardian.yml                  # GitHub Action for automated PR analysis
+│
+├── SOUL.md                             # Identity, values, communication style
+├── RULES.md                            # Hard behavioral constraints
+├── DUTIES.md                           # Segregation of duties & handoff protocol
+├── AGENTS.md                           # Framework-agnostic runtime instructions
+└── DESIGN.md                           # Architecture decisions & rationale
 ```
 
 ---
 
-## Setup & Usage
+## Graceful Degradation
 
-### Prerequisites
+PRGuardian is designed to **always return a valid result**, even when components fail:
 
-- Node.js 18+ (for `npx gitagent`)
-- An API key for your preferred model (Claude, GPT, Gemini, or Llama)
+| Failure | Behavior |
+|---------|----------|
+| LLM API unavailable | Falls back to deterministic-only analysis. Merge brief notes the limitation. Confidence set to MEDIUM. |
+| Malformed diff | Parser returns empty result. All downstream modules handle 0-file input gracefully. |
+| Diff too large (>100K chars) | Diff is truncated. Analysis proceeds on available content. Confidence lowered to MEDIUM. |
+| Invalid JSON input | Parser attempts raw diff extraction. Falls back to unified diff parsing. |
 
-### Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/aditya-3526/prguardian-gitagent.git
-cd prguardian-gitagent
-
-# Run with Claude adapter
-npx gitagent run ./prguardian-gitagent --adapter claude
-
-# Run with OpenAI adapter
-npx gitagent run ./prguardian-gitagent --adapter openai
-
-# Run with Gemini adapter
-npx gitagent run ./prguardian-gitagent --adapter gemini
-
-# Run with Lyzr adapter
-npx gitagent run ./prguardian-gitagent --adapter lyzr
-
-# Run with Python SDK
-pip install gitclaw
-gitclaw run ./prguardian-gitagent
-```
-
-### Run the Demo
-
-The fastest way to see PRGuardian in action is to run the included demo scenario — PR #247, the Friday auth time bomb:
-```bash
-# Set your API key
-export ANTHROPIC_API_KEY=your_key_here   # or OPENAI_API_KEY / GEMINI_API_KEY
-
-# Run the demo
-bash demo/run_demo.sh
-```
-
-This runs PRGuardian against a synthetic PR that has passing CI, two senior approvals, and two hidden issues that will cause a production incident. PRGuardian should issue `DO_NOT_MERGE` with risk score 89/100.
-
-### Input
-
-PRGuardian accepts:
-
-```json
-{
-  "pr_diff": "<unified diff string>",
-  "pr_description": "PR title and description",
-  "changed_files": ["src/auth/middleware.ts", "migrations/024.sql"],
-  "author_context": {
-    "is_new_contributor": false,
-    "pr_count_in_repo": 12,
-    "hours_since_last_pr": 48
-  },
-  "repo_context": {
-    "has_payments_module": true,
-    "has_auth_module": true,
-    "primary_language": "TypeScript"
-  }
-}
-```
-
-### Output
-
-PRGuardian returns:
-
-```json
-{
-  "merge_brief": "# PRGuardian Merge Brief\n...",
-  "recommendation": "MERGE_WITH_CONDITIONS",
-  "risk_score": 42,
-  "blocking_issues": [],
-  "confidence_level": "HIGH"
-}
-```
+The deterministic layer is the reliability guarantee. It runs in <100ms, requires zero API keys, and produces a valid recommendation from pure code — no network calls, no tokens, no model availability concerns.
 
 ---
 
 ## Demo Scenario
 
-### The Scenario
+The included demo (`demo/sample_pr.json`) simulates PR #247: "Optimize mobile token refresh."
 
-A developer submits PR #247: "Optimize mobile token refresh." The PR:
-- Looks small (87 lines, 4 files)
-- Has passing CI tests
-- Has two approvals from senior engineers
-- Was submitted at 16:47 on a Friday
+**What it looks like:** Small (87 lines, 4 files), passing CI, two senior approvals, Friday at 16:47.
 
-What the humans missed:
-1. A hardcoded Stripe API key in a test fixture file (`sk_live_...` — production prefix)
-2. A behavioral change to shared auth middleware that caches token configuration without a TTL, meaning auth provider key rotations will cause progressive token rejection
-3. The deployment timing (Friday 16:47) is the worst possible window for auth changes
+**What PRGuardian catches:**
+- The test fixture contains a Stripe key with production prefix (`sk_live_...`)
+- Auth middleware caches token configuration without TTL
+- Friday 16:47 is the worst deployment window for auth changes
 
-### What PRGuardian Catches
+**Run it:**
 
-PRGuardian issues `DO_NOT_MERGE` with risk score 89/100, identifying both the credential leak and the auth middleware time bomb. It generates a postmortem preview showing how a Saturday key rotation would cascade into 4,200 forced user logouts. It recommends not deploying on Friday and specifies Tuesday–Wednesday 10:00–14:00 as the optimal window.
-
-### The Outcome
-
-Without PRGuardian: The team merges on Friday. Saturday's key rotation triggers progressive auth failures. 4,200 users are affected. The on-call engineer spends the weekend debugging. The Stripe key sits in Git history for months.
-
-With PRGuardian: The team sees the merge brief, blocks the PR, rotates the key, fixes the cache TTL, and deploys on Tuesday. Zero incidents.
+```bash
+node analyze.js demo/sample_pr.json
+```
 
 ---
 

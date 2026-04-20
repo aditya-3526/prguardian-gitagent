@@ -12,7 +12,45 @@ This is PRGuardian's primary workflow. It orchestrates all 7 skills in sequence,
 
 ## Sequence
 
-### Step 1: Diff Semantic Analysis (REQUIRED — ALWAYS FIRST)
+### Step 0: Consume Deterministic Signals (REQUIRED — ALWAYS FIRST)
+
+**Source:** `deterministic_signals` object (provided in input payload by the deterministic analysis layer)
+**Purpose:** Establish the factual foundation for all downstream reasoning.
+
+The following signals are pre-computed by the deterministic analysis layer and are **AUTHORITATIVE**. All downstream skills must reference these signals and must not contradict them.
+
+```
+READ deterministic_signals FROM input payload
+  CONTAINS:
+    secrets          — Array of detected credential patterns (regex-based)
+    sensitive_files  — Array of files classified by risk category
+    diff_metrics     — Quantitative metrics (additions, deletions, file count, change size)
+    risk_score       — Pre-computed deterministic risk score (0-100) — IMMUTABLE
+    risk_breakdown   — Factor-level breakdown of the risk score
+    recommendation   — Deterministic recommendation (floor — can be downgraded, never upgraded)
+    hard_constraints_triggered — Array of triggered hard constraints (e.g., SECRET_DETECTED)
+```
+
+**Authority rules:**
+- If `secrets.secrets_detected > 0`: final recommendation MUST be `DO_NOT_MERGE` regardless of skill output
+- `risk_score` is FINAL. Skills may explain contributing factors but must not propose a different score
+- `sensitive_files` classifications should be used by skills rather than re-inferring from file paths
+- `diff_metrics` numbers must be used rather than estimating from raw diff text
+
+**Skills are the REASONING LAYER over these signals.** Their job is to:
+- Predict consequences using the signals as factual input
+- Model failure scenarios informed by which files and categories are affected
+- Explain WHY the risk score is what it is
+- Recommend conditions, timing, and reviewers based on the detected risk profile
+
+**Skills must NOT:**
+- Override the risk score
+- Dismiss or downgrade secret detections
+- Upgrade the recommendation beyond what the deterministic layer set
+
+---
+
+### Step 1: Diff Semantic Analysis (REQUIRED)
 
 **Skill:** `diff_semantic_analyzer`
 **Input:** `pr_diff`, `changed_files`

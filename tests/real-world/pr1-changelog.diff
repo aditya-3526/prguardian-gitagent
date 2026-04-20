@@ -1,0 +1,81 @@
+diff --git a/ReactVersions.js b/ReactVersions.js
+index dd8c78afb133..a486ccf2d91e 100644
+--- a/ReactVersions.js
++++ b/ReactVersions.js
+@@ -33,7 +33,7 @@ const canaryChannelLabel = 'canary';
+ const rcNumber = 0;
+ 
+ const stablePackages = {
+-  'eslint-plugin-react-hooks': '7.1.0',
++  'eslint-plugin-react-hooks': '7.1.1',
+   'jest-react': '0.18.0',
+   react: ReactVersion,
+   'react-art': ReactVersion,
+diff --git a/packages/eslint-plugin-react-hooks/CHANGELOG.md b/packages/eslint-plugin-react-hooks/CHANGELOG.md
+index 4ad4bb411c7e..fde29f763089 100644
+--- a/packages/eslint-plugin-react-hooks/CHANGELOG.md
++++ b/packages/eslint-plugin-react-hooks/CHANGELOG.md
+@@ -1,3 +1,9 @@
++## 7.1.1
++
++**Note:** 7.1.0 accidentally removed the `component-hook-factories` rule, causing errors for users who referenced it in their ESLint config. This is now fixed.
++
++- Add deprecated no-op `component-hook-factories` rule for backwards compatibility. ([@mofeiZ](https://github.com/mofeiZ) in [#36307](https://github.com/facebook/react/pull/36307))
++
+ ## 7.1.0
+ 
+ This release adds ESLint v10 support, improves performance by skipping compilation for non-React files, and includes compiler lint improvements including better `set-state-in-effect` detection, improved ref validation, and more helpful error reporting.
+diff --git a/packages/eslint-plugin-react-hooks/README.md b/packages/eslint-plugin-react-hooks/README.md
+index a1b4bcabb59f..b0a4491c99e0 100644
+--- a/packages/eslint-plugin-react-hooks/README.md
++++ b/packages/eslint-plugin-react-hooks/README.md
+@@ -74,7 +74,6 @@ export default [
+       // React Compiler rules
+       'react-hooks/config': 'error',
+       'react-hooks/error-boundaries': 'error',
+-      'react-hooks/component-hook-factories': 'error',
+       'react-hooks/gating': 'error',
+       'react-hooks/globals': 'error',
+       'react-hooks/immutability': 'error',
+@@ -108,7 +107,6 @@ export default [
+     // React Compiler rules
+     "react-hooks/config": "error",
+     "react-hooks/error-boundaries": "error",
+-    "react-hooks/component-hook-factories": "error",
+     "react-hooks/gating": "error",
+     "react-hooks/globals": "error",
+     "react-hooks/immutability": "error",
+diff --git a/packages/eslint-plugin-react-hooks/src/index.ts b/packages/eslint-plugin-react-hooks/src/index.ts
+index 924299d89894..33ee94a96e90 100644
+--- a/packages/eslint-plugin-react-hooks/src/index.ts
++++ b/packages/eslint-plugin-react-hooks/src/index.ts
+@@ -15,12 +15,29 @@ import {
+ } from './shared/ReactCompiler';
+ import RulesOfHooks from './rules/RulesOfHooks';
+ 
++function makeDeprecatedRule(version: string): Rule.RuleModule {
++  return {
++    meta: {
++      type: 'suggestion',
++      docs: {
++        description: `Deprecated: this rule has been removed in ${version}.`,
++      },
++      schema: [],
++      deprecated: true,
++    },
++    create() {
++      return {};
++    },
++  };
++}
++
+ const rules = {
+   'exhaustive-deps': ExhaustiveDeps,
+   'rules-of-hooks': RulesOfHooks,
+   ...Object.fromEntries(
+     Object.entries(allRules).map(([name, config]) => [name, config.rule]),
+   ),
++  'component-hook-factories': makeDeprecatedRule('7.1.0'),
+ } satisfies Record<string, Rule.RuleModule>;
+ 
+ const basicRuleConfigs = {

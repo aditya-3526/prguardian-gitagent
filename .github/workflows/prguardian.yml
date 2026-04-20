@@ -1,0 +1,80 @@
+name: PRGuardian Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze:
+    name: PRGuardian Merge Brief
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run PRGuardian Analysis
+        id: analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch the PR diff
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          echo "Analyzing PR #${PR_NUMBER} on ${REPO}..."
+
+          # Run analysis and capture output
+          node analyze.js --pr "${REPO}#${PR_NUMBER}" --json > /tmp/prguardian-result.json 2>/tmp/prguardian-log.txt || true
+
+          # Extract recommendation for summary
+          RECOMMENDATION=$(cat /tmp/prguardian-result.json | node -e "process.stdin.setEncoding('utf8');let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).recommendation)}catch{console.log('UNKNOWN')}})")
+          RISK_SCORE=$(cat /tmp/prguardian-result.json | node -e "process.stdin.setEncoding('utf8');let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).risk_score)}catch{console.log('?')}})")
+
+          echo "recommendation=${RECOMMENDATION}" >> $GITHUB_OUTPUT
+          echo "risk_score=${RISK_SCORE}" >> $GITHUB_OUTPUT
+
+          echo "## PRGuardian Result" >> $GITHUB_STEP_SUMMARY
+          echo "- **Recommendation:** ${RECOMMENDATION}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Risk Score:** ${RISK_SCORE}/100" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate Merge Brief
+        id: brief
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          # Generate markdown merge brief
+          node analyze.js --pr "${REPO}#${PR_NUMBER}" > /tmp/prguardian-brief.md 2>/dev/null || true
+
+          # Post or update the PR comment
+          node -e "
+            const { postOrUpdate } = require('./src/github/comment-poster');
+            const fs = require('fs');
+            const brief = fs.readFileSync('/tmp/prguardian-brief.md', 'utf-8');
+            postOrUpdate('${REPO}#${PR_NUMBER}', brief)
+              .then(() => console.log('Comment posted successfully'))
+              .catch(err => console.error('Failed to post comment:', err.message));
+          "
+
+      - name: Check for blocking issues
+        if: steps.analyze.outputs.recommendation == 'DO_NOT_MERGE'
+        run: |
+          echo "::warning::PRGuardian recommends DO_NOT_MERGE (Risk Score: ${{ steps.analyze.outputs.risk_score }}/100)"
+          # Optionally fail the check:
+          # exit 1

@@ -1,0 +1,85 @@
+diff --git a/src/auth/middleware/validateSession.ts b/src/auth/middleware/validateSession.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/src/auth/middleware/validateSession.ts
++++ b/src/auth/middleware/validateSession.ts
+@@ -1,15 +1,22 @@
+ import { Request, Response, NextFunction } from 'express';
+ import { SessionStore } from '../stores/SessionStore';
++import { AuditLogger } from '../../shared/logging/audit';
+ 
+ export async function validateSession(req: Request, res: Response, next: NextFunction) {
+   const sessionId = req.cookies?.session_id;
+ 
+   if (!sessionId) {
+-    return res.status(401).json({ error: 'No session' });
++    AuditLogger.log('auth_failure', { reason: 'missing_session', ip: req.ip });
++    return res.status(401).json({ error: 'Authentication required' });
+   }
+ 
+-  const session = await SessionStore.get(sessionId);
+-  if (!session) {
+-    return res.status(401).json({ error: 'Invalid session' });
++  const session = await SessionStore.get(sessionId, { refresh: true });
++  if (!session || session.expiresAt < Date.now()) {
++    AuditLogger.log('auth_failure', { reason: 'expired_session', sessionId });
++    return res.status(401).json({ error: 'Session expired' });
++  }
++
++  if (session.role !== req.body?.requiredRole && req.body?.requiredRole) {
++    AuditLogger.log('auth_failure', { reason: 'insufficient_role', sessionId, required: req.body.requiredRole });
++    return res.status(403).json({ error: 'Insufficient permissions' });
+   }
+ 
+   req.user = session.user;
+diff --git a/migrations/031_add_mfa_column.sql b/migrations/031_add_mfa_column.sql
+index 0000000..abcdef1 100644
+--- /dev/null
++++ b/migrations/031_add_mfa_column.sql
+@@ -0,0 +1,8 @@
++-- Migration: Add MFA support to users table
++-- Author: dev-team
++-- Date: 2026-04-15
++
++ALTER TABLE users ADD COLUMN mfa_enabled BOOLEAN NOT NULL DEFAULT false;
++ALTER TABLE users ADD COLUMN mfa_secret VARCHAR(128);
++
++CREATE INDEX idx_users_mfa ON users(mfa_enabled) WHERE mfa_enabled = true;
+diff --git a/src/shared/utils/tokenHelper.ts b/src/shared/utils/tokenHelper.ts
+index 9876543..1234567 100644
+--- a/src/shared/utils/tokenHelper.ts
++++ b/src/shared/utils/tokenHelper.ts
+@@ -8,8 +8,12 @@
+ export function generateToken(userId: string, role: string): string {
+-  return jwt.sign({ userId, role }, SECRET, { expiresIn: '24h' });
++  const payload = { userId, role, mfa: false };
++  return jwt.sign(payload, SECRET, {
++    expiresIn: '24h',
++    algorithm: 'RS256'
++  });
+ }
+ 
+-export function verifyToken(token: string): TokenPayload {
+-  return jwt.verify(token, SECRET) as TokenPayload;
++export function verifyToken(token: string, options?: VerifyOptions): TokenPayload {
++  return jwt.verify(token, SECRET, { algorithms: ['RS256'], ...options }) as TokenPayload;
+ }
+diff --git a/src/api/routes/users.ts b/src/api/routes/users.ts
+index abc1234..def5678 100644
+--- a/src/api/routes/users.ts
++++ b/src/api/routes/users.ts
+@@ -15,6 +15,12 @@
+   const user = await UserService.getById(req.params.id);
+   if (!user) return res.status(404).json({ error: 'Not found' });
+-  res.json(user);
++  res.json({
++    ...user,
++    mfa_enabled: user.mfa_enabled || false,
++    last_login: user.last_login
++  });
+ });
++
++// New endpoint for MFA enrollment
++router.post('/:id/mfa/enroll', requireAuth, async (req, res) => {
++  const result = await UserService.enrollMFA(req.params.id);
++  res.json(result);
++});

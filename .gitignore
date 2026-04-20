@@ -25,3 +25,9 @@ __pycache__/
 memory/runtime/*.tmp
 memory/runtime/*.log
 .gitagent/
+
+# PRGuardian runtime logs
+logs/
+
+# Package lock
+package-lock.json
